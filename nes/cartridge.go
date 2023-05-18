@@ -31,3 +31,15 @@ func (cartridge *Cartridge) Load(decoder *gob.Decoder) error {
 	decoder.Decode(&cartridge.Mirror)
 	return nil
 }
+
+func (cartridge *Cartridge) SaveLean(encoder *gob.Encoder) error {
+	encoder.Encode(cartridge.SRAM)
+	encoder.Encode(cartridge.Mirror)
+	return nil
+}
+
+func (cartridge *Cartridge) LoadLean(decoder *gob.Decoder) error {
+	decoder.Decode(&cartridge.SRAM)
+	decoder.Decode(&cartridge.Mirror)
+	return nil
+}

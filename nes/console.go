@@ -1,9 +1,12 @@
 package nes
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/gob"
 	"image"
 	"image/color"
+	"io/ioutil"
 	"os"
 	"path"
 )
@@ -107,6 +110,7 @@ func (console *Console) SetAudioSampleRate(sampleRate float64) {
 		console.APU.filterChain = nil
 	}
 }
+
 func (console *Console) SaveState(filename string) error {
 	dir, _ := path.Split(filename)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -153,4 +157,88 @@ func (console *Console) Load(decoder *gob.Decoder) error {
 		return err
 	}
 	return nil
+}
+
+func (console *Console) SaveStateCompressed(filename string) error {
+	dir, _ := path.Split(filename)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	var buffer bytes.Buffer
+	encoder := gob.NewEncoder(&buffer)
+
+	err := console.SaveLean(encoder)
+	if err != nil {
+		return err
+	}
+
+	compressedData, err := Compress(buffer.Bytes())
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile(filename, compressedData, 0644)
+}
+
+func (console *Console) SaveLean(encoder *gob.Encoder) error {
+	encoder.Encode(console.RAM)
+	console.CPU.Save(encoder)
+	console.APU.Save(encoder)
+	console.PPU.Save(encoder)
+	console.Cartridge.SaveLean(encoder)
+	console.Mapper.Save(encoder)
+	return encoder.Encode(true)
+}
+
+func (console *Console) LoadStateCompressed(filename string) error {
+	compressedData, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+
+	data, err := Decompress(compressedData)
+	if err != nil {
+		return err
+	}
+
+	decoder := gob.NewDecoder(bytes.NewBuffer(data))
+
+	return console.LoadLean(decoder)
+}
+
+func (console *Console) LoadLean(decoder *gob.Decoder) error {
+	decoder.Decode(&console.RAM)
+	console.CPU.Load(decoder)
+	console.APU.Load(decoder)
+	console.PPU.Load(decoder)
+	console.Cartridge.LoadLean(decoder)
+	console.Mapper.Load(decoder)
+	var dummy bool
+	if err := decoder.Decode(&dummy); err != nil {
+		return err
+	}
+	return nil
+}
+
+func Compress(data []byte) ([]byte, error) {
+	var buffer bytes.Buffer
+	gz := gzip.NewWriter(&buffer)
+	if _, err := gz.Write(data); err != nil {
+		return nil, err
+	}
+	if err := gz.Close(); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+func Decompress(data []byte) ([]byte, error) {
+	gz, err := gzip.NewReader(bytes.NewBuffer(data))
+	if err != nil {
+		return nil, err
+	}
+	defer gz.Close()
+
+	return ioutil.ReadAll(gz)
 }

@@ -11,7 +11,7 @@ import (
 var ConsoleStepsPerTick = 100_000
 
 type Headless struct {
-	console Console
+	Console Console
 }
 
 type Action struct {

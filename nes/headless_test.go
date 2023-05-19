@@ -6,11 +6,11 @@ import (
 )
 
 func TestHeadless(t *testing.T) {
-	static, err := ioutil.ReadFile("../mario.static")
+	static, err := ioutil.ReadFile("../roms/mario.static")
 	if err != nil {
 		t.Fatal(err)
 	}
-	dynamic, err := ioutil.ReadFile("../mario.dyn")
+	dynamic, err := ioutil.ReadFile("../roms/mario.dyn")
 	if err != nil {
 		t.Fatal(err)
 	}

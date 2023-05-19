@@ -8,7 +8,7 @@ import (
 )
 
 // 1789773 Hz / 100_000 = 17.89773 Hz
-var ConsoleStepsPerTick = 100_000
+var ConsoleStepsPerTick = 10_000
 
 type Headless struct {
 	Console Console

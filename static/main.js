@@ -1,3 +1,34 @@
+// Create an object to store the key states
+const keyStates = {};
+const pendingKeyStates = {};
+
+// Event listener for keydown event
+window.addEventListener('keydown', (event) => {
+    // Set the corresponding key state to true when a key is pressed
+    keyStates[event.code] = true;
+});
+
+// Event listener for keyup event
+window.addEventListener('keyup', (event) => {
+    // Set the corresponding key state to false when a key is released
+    pendingKeyStates[event.code] = false;
+});
+
+function updateKeyStates() {
+    for (const [key, value] of Object.entries(pendingKeyStates)) {
+        keyStates[key] = value;
+    }
+}
+
+// Function to check if a key is currently pressed
+function isKeyPressed(keyCode) {
+    return keyStates[keyCode] === true;
+}
+
+function isKeyPressedUint8(keyCode) {
+    return isKeyPressed(keyCode) ? 1 : 0;
+}
+
 if (WebAssembly) {
     // WebAssembly.instantiateStreaming is not currently available in Safari
     if (WebAssembly && !WebAssembly.instantiateStreaming) { // polyfill
@@ -8,7 +39,7 @@ if (WebAssembly) {
     }
 
     const go = new Go();
-    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
+    WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then(async (result) => {
         go.run(result.instance);
 
         // Call the setup function
@@ -21,27 +52,51 @@ if (WebAssembly) {
         const canvas = document.getElementById('canvas');
         const context = canvas.getContext('2d');
 
+        imgWidth = 256;
+        imgHeight = 240;
+
         // Call the step function and render the result
-        function renderStep() {
-            const actionData = new Uint8Array();
-            const rawImageData = new Uint8Array(canvas.width * canvas.height * 4);
-            step(actionData, rawImageData);
-            console.log(rawImageData);
-            
-            const imageData = context.createImageData(canvas.width, canvas.height);
-
-            // Copy the image bytes to the ImageData
+        function renderStep(buttons) {
+            // const actionData = new Uint8Array();
+            const imageData = context.createImageData(imgWidth, imgHeight);
+            const rawImageData = new Uint8Array(imgWidth * imgHeight * 4);
+            let startTime = performance.now();
+            step(buttons, rawImageData);
+            let endTime = performance.now();
+            console.log("Tick took " + (endTime - startTime) + " milliseconds.");
+            startTime = performance.now();
             imageData.data.set(rawImageData);
-
-            // Render the ImageData on the canvas
             context.putImageData(imageData, 0, 0);
-
-            // Request the next animation frame for continuous rendering
-            // requestAnimationFrame(renderStep);
+            endTime = performance.now();
+            console.log("Render took " + (endTime - startTime) + " milliseconds.");
         }
 
         // Start the rendering
-        renderStep();
+        while (true) {
+            const buttons = new Uint8Array([
+                isKeyPressedUint8("KeyZ"),
+                isKeyPressedUint8("KeyX"),
+                isKeyPressedUint8("ShiftRight"),
+                isKeyPressedUint8("Enter"),
+                isKeyPressedUint8("ArrowUp"),
+                isKeyPressedUint8("ArrowDown"),
+                isKeyPressedUint8("ArrowLeft"),
+                isKeyPressedUint8("ArrowRight"),
+            ]);
+            console.log({
+                "ButtonA" : buttons[0],
+                "ButtonB" : buttons[1],
+                "ButtonSelect" : buttons[2],
+                "ButtonStart" : buttons[3],
+                "ButtonUp" : buttons[4],
+                "ButtonDown" : buttons[5],
+                "ButtonLeft" : buttons[6],
+                "ButtonRight" : buttons[7],
+            });
+            renderStep(buttons);
+            updateKeyStates();
+            await new Promise(r => setTimeout(r, 1000));
+        }
     });
 } else {
     console.log("WebAssembly is not supported in your browser")

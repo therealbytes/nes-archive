@@ -10,7 +10,7 @@ func TestHeadless(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dynamic, err := ioutil.ReadFile("../mario.dynamic")
+	dynamic, err := ioutil.ReadFile("../mario.dyn")
 	if err != nil {
 		t.Fatal(err)
 	}

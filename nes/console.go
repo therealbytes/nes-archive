@@ -195,23 +195,6 @@ func (console *Console) LoadDynamic(decoder *gob.Decoder) error {
 	return nil
 }
 
-func (console *Console) Serialize() ([]byte, error) {
-	var buffer bytes.Buffer
-	encoder := gob.NewEncoder(&buffer)
-	if err := console.Save(encoder); err != nil {
-		return nil, err
-	}
-	return buffer.Bytes(), nil
-}
-
-func (console *Console) Deserialize(data []byte) error {
-	decoder := gob.NewDecoder(bytes.NewReader(data))
-	if err := console.Load(decoder); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (console *Console) SerializeStatic() ([]byte, error) {
 	var buffer bytes.Buffer
 	encoder := gob.NewEncoder(&buffer)

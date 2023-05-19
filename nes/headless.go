@@ -71,6 +71,23 @@ func (headless *Headless) Tick(ticks int) {
 	}
 }
 
+func HeadlessRun(static []byte, dynamic []byte, activity []Action) ([]byte, []byte, error) {
+	headless, err := NewHeadless(static, dynamic)
+	if err != nil {
+		return nil, nil, err
+	}
+	headless.Run(activity)
+	static, err = headless.Console.SerializeStatic()
+	if err != nil {
+		return nil, nil, err
+	}
+	dynamic, err = headless.Console.SerializeStatic()
+	if err != nil {
+		return nil, nil, err
+	}
+	return static, dynamic, nil
+}
+
 func Compress(data []byte) ([]byte, error) {
 	var buffer bytes.Buffer
 	gz := gzip.NewWriter(&buffer)

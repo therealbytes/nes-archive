@@ -31,8 +31,17 @@ func (view *GameView) Enter() {
 	view.console.SetAudioChannel(view.director.audio.channel)
 	view.console.SetAudioSampleRate(view.director.audio.sampleRate)
 	view.director.window.SetKeyCallback(view.onKey)
+
+	// if err := view.console.LoadStateDynamic("./mario"); err == nil {
+	// 	return
+	// } else {
+	// 	log.Fatal(err)
+	// 	view.console.Reset()
+	// }
+	// return
+
 	// load state
-	if err := view.console.LoadStateCompressed(savePath(view.hash)); err == nil {
+	if err := view.console.LoadState(savePath(view.hash)); err == nil {
 		return
 	} else {
 		view.console.Reset()
@@ -56,7 +65,9 @@ func (view *GameView) Exit() {
 		writeSRAM(sramPath(view.hash), cartridge.SRAM)
 	}
 	// save state
-	view.console.SaveStateCompressed(savePath(view.hash))
+	view.console.SaveState(savePath(view.hash))
+	// view.console.SaveStateStatic("./mario")
+	// view.console.SaveStateDynamic("./mario")
 }
 
 func (view *GameView) Update(t, dt float64) {

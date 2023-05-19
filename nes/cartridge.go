@@ -32,14 +32,34 @@ func (cartridge *Cartridge) Load(decoder *gob.Decoder) error {
 	return nil
 }
 
-func (cartridge *Cartridge) SaveLean(encoder *gob.Encoder) error {
-	encoder.Encode(cartridge.SRAM)
+func (cartridge *Cartridge) SaveStatic(encoder *gob.Encoder) error {
+	encoder.Encode(cartridge.PRG)
+	encoder.Encode(cartridge.Mapper)
+	encoder.Encode(cartridge.Battery)
+	return nil
+}
+
+func (cartridge *Cartridge) LoadStatic(decoder *gob.Decoder) error {
+	decoder.Decode(&cartridge.PRG)
+	decoder.Decode(&cartridge.Mapper)
+	decoder.Decode(&cartridge.Battery)
+	return nil
+}
+
+func (cartridge *Cartridge) SaveDynamic(encoder *gob.Encoder) error {
+	encoder.Encode(cartridge.CHR)
+	if cartridge.Battery != 0 {
+		encoder.Encode(cartridge.SRAM)
+	}
 	encoder.Encode(cartridge.Mirror)
 	return nil
 }
 
-func (cartridge *Cartridge) LoadLean(decoder *gob.Decoder) error {
-	decoder.Decode(&cartridge.SRAM)
+func (cartridge *Cartridge) LoadDynamic(decoder *gob.Decoder) error {
+	decoder.Decode(&cartridge.CHR)
+	if cartridge.Battery != 0 {
+		decoder.Decode(&cartridge.SRAM)
+	}
 	decoder.Decode(&cartridge.Mirror)
 	return nil
 }

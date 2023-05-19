@@ -158,7 +158,7 @@ func (console *Console) Load(decoder *gob.Decoder) error {
 }
 
 func (console *Console) SaveStateStatic(filename string) error {
-	file, err := os.Create(filename + ".static")
+	file, err := os.Create(staticPath(filename))
 	fmt.Println("Saving static state to", filename+".static")
 	if err != nil {
 		return err
@@ -169,7 +169,7 @@ func (console *Console) SaveStateStatic(filename string) error {
 }
 
 func (console *Console) SaveStateDynamic(filename string) error {
-	file, err := os.Create(filename + ".dynamic")
+	file, err := os.Create(dynamicPath(filename))
 	fmt.Println("Saving dynamic state to", filename+".dynamic")
 	if err != nil {
 		return err
@@ -180,7 +180,7 @@ func (console *Console) SaveStateDynamic(filename string) error {
 }
 
 func (console *Console) LoadStateStatic(filename string) error {
-	file, err := os.Open(filename + ".static")
+	file, err := os.Create(staticPath(filename))
 	if err != nil {
 		return err
 	}
@@ -190,7 +190,7 @@ func (console *Console) LoadStateStatic(filename string) error {
 }
 
 func (console *Console) LoadStateDynamic(filename string) error {
-	file, err := os.Open(filename + ".dynamic")
+	file, err := os.Create(dynamicPath(filename))
 	if err != nil {
 		return err
 	}
@@ -235,4 +235,12 @@ func (console *Console) LoadDynamic(decoder *gob.Decoder) error {
 		return err
 	}
 	return nil
+}
+
+func staticPath(filename string) string {
+	return filename + ".static"
+}
+
+func dynamicPath(filename string) string {
+	return filename + ".dynamic"
 }

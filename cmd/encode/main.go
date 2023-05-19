@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -27,12 +28,37 @@ func encode(path string) {
 	if err != nil {
 		log.Fatalln(err)
 	}
+
 	noext := strings.TrimSuffix(path, filepath.Ext(path))
-	err = console.SaveStateStatic(noext)
+
+	static, err := console.SerializeStatic()
 	if err != nil {
 		log.Fatalln(err)
 	}
-	err = console.SaveStateDynamic(noext)
+
+	dyn, err := console.SerializeDynamic()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	// write static data
+	staticPath := noext + ".static"
+	fmt.Println("Writing static data:", staticPath)
+	writeFile(staticPath, static)
+
+	// write dynamic data
+	dynPath := noext + ".dyn"
+	fmt.Println("Writing dynamic data:", dynPath)
+	writeFile(dynPath, dyn)
+}
+
+func writeFile(path string, data []byte) {
+	file, err := os.Create(path)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer file.Close()
+	_, err = file.Write(data)
 	if err != nil {
 		log.Fatalln(err)
 	}

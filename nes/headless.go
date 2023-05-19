@@ -51,7 +51,7 @@ func NewHeadless(static []byte, dynamic []byte) (*Headless, error) {
 }
 
 func (headless *Headless) Run(activity []Action) {
-	console := headless.console
+	console := headless.Console
 	for _, action := range activity {
 		if action.Button < 8 {
 			console.Controller1.buttons[action.Button] = action.Press
@@ -64,7 +64,7 @@ func (headless *Headless) Run(activity []Action) {
 
 // One tick corresponds to a fixed number of CPU Steps (not cycles!).
 func (headless *Headless) Tick(ticks int) {
-	console := headless.console
+	console := headless.Console
 	steps := ConsoleStepsPerTick * ticks
 	for step := 0; step < steps; step++ {
 		console.Step()

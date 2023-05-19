@@ -1,8 +1,8 @@
 package nes
 
 import (
+	"bytes"
 	"encoding/gob"
-	"fmt"
 	"image"
 	"image/color"
 	"os"
@@ -157,48 +157,6 @@ func (console *Console) Load(decoder *gob.Decoder) error {
 	return nil
 }
 
-func (console *Console) SaveStateStatic(filename string) error {
-	file, err := os.Create(staticPath(filename))
-	fmt.Println("Saving static state to", filename+".static")
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	encoder := gob.NewEncoder(file)
-	return console.SaveStatic(encoder)
-}
-
-func (console *Console) SaveStateDynamic(filename string) error {
-	file, err := os.Create(dynamicPath(filename))
-	fmt.Println("Saving dynamic state to", filename+".dynamic")
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	encoder := gob.NewEncoder(file)
-	return console.SaveDynamic(encoder)
-}
-
-func (console *Console) LoadStateStatic(filename string) error {
-	file, err := os.Create(staticPath(filename))
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	decoder := gob.NewDecoder(file)
-	return console.LoadStatic(decoder)
-}
-
-func (console *Console) LoadStateDynamic(filename string) error {
-	file, err := os.Create(dynamicPath(filename))
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	decoder := gob.NewDecoder(file)
-	return console.LoadDynamic(decoder)
-}
-
 func (console *Console) SaveStatic(encoder *gob.Encoder) error {
 	console.Cartridge.SaveStatic(encoder)
 	return encoder.Encode(true)
@@ -237,10 +195,53 @@ func (console *Console) LoadDynamic(decoder *gob.Decoder) error {
 	return nil
 }
 
-func staticPath(filename string) string {
-	return filename + ".static"
+func (console *Console) Serialize() ([]byte, error) {
+	var buffer bytes.Buffer
+	encoder := gob.NewEncoder(&buffer)
+	if err := console.Save(encoder); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
 }
 
-func dynamicPath(filename string) string {
-	return filename + ".dynamic"
+func (console *Console) Deserialize(data []byte) error {
+	decoder := gob.NewDecoder(bytes.NewReader(data))
+	if err := console.Load(decoder); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (console *Console) SerializeStatic() ([]byte, error) {
+	var buffer bytes.Buffer
+	encoder := gob.NewEncoder(&buffer)
+	if err := console.SaveStatic(encoder); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+func (console *Console) DeserializeStatic(data []byte) error {
+	decoder := gob.NewDecoder(bytes.NewReader(data))
+	if err := console.LoadStatic(decoder); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (console *Console) SerializeDynamic() ([]byte, error) {
+	var buffer bytes.Buffer
+	encoder := gob.NewEncoder(&buffer)
+	if err := console.SaveDynamic(encoder); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+func (console *Console) DeserializeDynamic(data []byte) error {
+	decoder := gob.NewDecoder(bytes.NewReader(data))
+	if err := console.LoadDynamic(decoder); err != nil {
+		return err
+	}
+	return nil
 }

@@ -2,6 +2,7 @@ package nes
 
 import (
 	"encoding/gob"
+	"fmt"
 	"image"
 	"image/color"
 	"os"
@@ -158,6 +159,7 @@ func (console *Console) Load(decoder *gob.Decoder) error {
 
 func (console *Console) SaveStateStatic(filename string) error {
 	file, err := os.Create(filename + ".static")
+	fmt.Println("Saving static state to", filename+".static")
 	if err != nil {
 		return err
 	}
@@ -168,6 +170,7 @@ func (console *Console) SaveStateStatic(filename string) error {
 
 func (console *Console) SaveStateDynamic(filename string) error {
 	file, err := os.Create(filename + ".dynamic")
+	fmt.Println("Saving dynamic state to", filename+".dynamic")
 	if err != nil {
 		return err
 	}

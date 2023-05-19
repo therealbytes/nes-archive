@@ -1,25 +1,13 @@
-package main
+package cmd
 
 import (
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"strings"
-
-	"github.com/fogleman/nes/ui"
 )
 
-func main() {
-	log.SetFlags(0)
-	paths := getPaths()
-	if len(paths) == 0 {
-		log.Fatalln("no rom files specified or found")
-	}
-	ui.Run(paths)
-}
-
-func getPaths() []string {
+func GetPaths() []string {
 	var arg string
 	args := os.Args[1:]
 	if len(args) == 1 {

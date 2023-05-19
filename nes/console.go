@@ -20,15 +20,6 @@ type Console struct {
 }
 
 func NewConsole(path string) (*Console, error) {
-	// _console := Console{
-	// 	Cartridge: &Cartridge{},
-	// }
-	// err := _console.LoadStateStatic("./mario")
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// cartridge := _console.Cartridge
-
 	cartridge, err := LoadNESFile(path)
 	if err != nil {
 		return nil, err

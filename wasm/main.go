@@ -2,15 +2,11 @@ package main
 
 import (
 	_ "embed"
-	"encoding/json"
-	"fmt"
 	"syscall/js"
 	"time"
 
 	"github.com/fogleman/nes/nes"
 )
-
-// Global state variables
 
 //go:embed state/mario.static
 var staticData []byte
@@ -18,83 +14,87 @@ var staticData []byte
 //go:embed state/mario.dyn
 var dynamicData []byte
 
-var runner *nes.Headless
+const (
+	NES_WIDTH  = 256
+	NES_HEIGHT = 240
+)
 
 func main() {
-	// Expose Go functions to JavaScript
-	js.Global().Set("setup", js.FuncOf(setup))
-	js.Global().Set("step", js.FuncOf(step))
-	js.Global().Set("getState", js.FuncOf(getState))
+	// kb := NewKeyboard()
+	renderer := NewRenderer()
 
-	<-make(chan bool)
-}
-
-// Wrapper functions to handle JavaScript interactions
-
-func setup(this js.Value, args []js.Value) interface{} {
-	// staticData = make([]byte, args[0].Length())
-	// js.CopyBytesToGo(staticData, args[0])
-
-	// dynamicData = make([]byte, args[1].Length())
-	// js.CopyBytesToGo(dynamicData, args[1])
-
-	var err error
-	runner, err = nes.NewHeadless(staticData, dynamicData)
+	nes, err := nes.NewHeadlessConsole(staticData, dynamicData)
 	if err != nil {
 		panic(err)
 	}
 
-	return nil
-}
+	spf := time.Second / 10
+	ticker := time.NewTicker(spf)
+	defer ticker.Stop()
 
-func step(this js.Value, args []js.Value) interface{} {
-	startTime := time.Now()
-
-	buttonsData := args[0]
-	buttons := make([]uint8, 8)
-	js.CopyBytesToGo(buttons, buttonsData)
-
-	endTime := time.Now()
-	elapsed := endTime.Sub(startTime)
-	fmt.Println("[wasm] Time to copy bytes to Go:", elapsed)
-
-	startTime = time.Now()
-
-	var buttonsBool [8]bool
-	for i, button := range buttons {
-		buttonsBool[i] = button == 1
+	for range ticker.C {
+		nes.StepSeconds(spf.Seconds())
+		renderer.renderImage(nes.Buffer().Pix)
 	}
-
-	endTime = time.Now()
-	elapsed = endTime.Sub(startTime)
-	fmt.Println("[wasm] Time to convert bytes to bool:", elapsed)
-
-	startTime = time.Now()
-
-	runner.Console.Controller1.SetButtons(buttonsBool)
-	runner.Tick(10)
-
-	endTime = time.Now()
-	elapsed = endTime.Sub(startTime)
-	fmt.Println("[wasm] Time to tick:", elapsed)
-
-	startTime = time.Now()
-
-	js.CopyBytesToJS(args[1], runner.Console.Buffer().Pix)
-
-	endTime = time.Now()
-	elapsed = endTime.Sub(startTime)
-	fmt.Println("[wasm] Time to copy bytes to JS:", elapsed)
-
-	return nil
 }
 
-func getState(this js.Value, args []js.Value) interface{} {
-	staticJSON, _ := json.Marshal(staticData)
-	dynamicJSON, _ := json.Marshal(dynamicData)
+type renderer struct{}
 
-	return js.ValueOf(map[string]interface{}{
-		"staticData":  string(staticJSON),
-		"dynamicData": string(dynamicJSON),
-	})
+func NewRenderer() *renderer {
+	return &renderer{}
+}
+
+func (r *renderer) renderImage(rawImageData []uint8) {
+	document := js.Global().Get("document")
+	canvas := document.Call("getElementById", "canvas")
+	context := canvas.Call("getContext", "2d")
+	imageData := context.Call("createImageData", NES_WIDTH, NES_HEIGHT)
+	jsData := imageData.Get("data")
+	js.CopyBytesToJS(jsData, rawImageData)
+	context.Call("putImageData", imageData, 0, 0)
+}
+
+type keyboard struct {
+	keyStates     map[string]bool
+	pendingKeyUps map[string]bool
+}
+
+func NewKeyboard() *keyboard {
+	kb := &keyboard{
+		keyStates:     make(map[string]bool),
+		pendingKeyUps: make(map[string]bool),
+	}
+	window := js.Global().Get("window")
+	window.Call("addEventListener", "keydown", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		event := args[0]
+		key := event.Get("code").String()
+		kb.keyStates[key] = true
+		return nil
+	}))
+	window.Call("addEventListener", "keyup", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		event := args[0]
+		key := event.Get("code").String()
+		kb.pendingKeyUps[key] = false
+		return nil
+	}))
+	return kb
+}
+
+func (kb *keyboard) finaliseKeyUps() {
+	for key, value := range kb.pendingKeyUps {
+		kb.keyStates[key] = value
+	}
+}
+
+func (kb *keyboard) getController() [8]bool {
+	return [8]bool{
+		kb.keyStates["KeyZ"],
+		kb.keyStates["KeyX"],
+		kb.keyStates["ShiftRight"],
+		kb.keyStates["Enter"],
+		kb.keyStates["ArrowUp"],
+		kb.keyStates["ArrowDown"],
+		kb.keyStates["ArrowLeft"],
+		kb.keyStates["ArrowRight"],
+	}
 }

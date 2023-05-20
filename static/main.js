@@ -1,3 +1,10 @@
+// ==== CONSTANTS ====
+
+NES_WIDTH = 256;
+NEW_HEIGHT = 240;
+
+// ==== KEYBOARD INPUT ====
+
 // Create an object to store the key states
 const keyStates = {};
 const pendingKeyStates = {};
@@ -29,6 +36,8 @@ function isKeyPressedUint8(keyCode) {
     return isKeyPressed(keyCode) ? 1 : 0;
 }
 
+// ==== WEBASSEMBLY ====
+
 if (WebAssembly) {
     // WebAssembly.instantiateStreaming is not currently available in Safari
     if (WebAssembly && !WebAssembly.instantiateStreaming) { // polyfill
@@ -52,14 +61,10 @@ if (WebAssembly) {
         const canvas = document.getElementById('canvas');
         const context = canvas.getContext('2d');
 
-        imgWidth = 256;
-        imgHeight = 240;
-
         // Call the step function and render the result
         function renderStep(buttons) {
-            // const actionData = new Uint8Array();
-            const imageData = context.createImageData(imgWidth, imgHeight);
-            const rawImageData = new Uint8Array(imgWidth * imgHeight * 4);
+            const imageData = context.createImageData(NES_WIDTH, NEW_HEIGHT);
+            const rawImageData = new Uint8Array(NES_WIDTH * NEW_HEIGHT * 4);
             let startTime = performance.now();
             step(buttons, rawImageData);
             let endTime = performance.now();

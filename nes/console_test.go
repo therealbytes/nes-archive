@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-func TestSerialization(t *testing.T) {
+func TestConsole(t *testing.T) {
 	console1, err := NewConsole("../roms/mario.nes")
 	if err != nil {
 		t.Fatal(err)
 	}
 	console1.Reset()
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 100_000; i++ {
 		console1.Step()
 	}
 
@@ -20,38 +20,17 @@ func TestSerialization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	dynamic, err := console1.SerializeDynamic()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cartridge := &Cartridge{}
-	ram := make([]byte, 2048)
-	controller1 := NewController()
-	controller2 := NewController()
-	console2 := Console{nil, nil, nil, cartridge, controller1, controller2, nil, ram}
-
-	err = console2.DeserializeStatic(static)
+	console2, err := NewHeadlessConsole(static, dynamic)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	mapper, err := NewMapper(&console2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	console2.Mapper = mapper
-	console2.CPU = NewCPU(&console2)
-	console2.APU = NewAPU(&console2)
-	console2.PPU = NewPPU(&console2)
-
-	err = console2.DeserializeDynamic(dynamic)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 100_000; i++ {
 		console1.Step()
 		console2.Step()
 	}

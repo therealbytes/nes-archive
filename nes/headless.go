@@ -1,36 +1,13 @@
 package nes
 
-import (
-	"bytes"
-	"compress/gzip"
-	"encoding/gob"
-	"io/ioutil"
-)
-
-// 1789773 Hz / 100_000 = 17.89773 Hz
-var ConsoleStepsPerTick = 10_000
-
-type Headless struct {
-	Console Console
-}
-
-type Action struct {
-	Button int
-	Press  bool
-	Wait   int
-}
-
-func NewHeadless(static []byte, dynamic []byte) (*Headless, error) {
-	staticDecoder := gob.NewDecoder(bytes.NewBuffer(static))
-	dynamicDecoder := gob.NewDecoder(bytes.NewBuffer(dynamic))
-
+func NewHeadlessConsole(static []byte, dynamic []byte) (*Console, error) {
 	cartridge := &Cartridge{}
 	ram := make([]byte, 2048)
 	controller1 := NewController()
 	controller2 := NewController()
 	console := Console{nil, nil, nil, cartridge, controller1, controller2, nil, ram}
 
-	if err := console.LoadStatic(staticDecoder); err != nil {
+	if err := console.DeserializeStatic(static); err != nil {
 		return nil, err
 	}
 
@@ -43,69 +20,27 @@ func NewHeadless(static []byte, dynamic []byte) (*Headless, error) {
 	console.APU = NewAPU(&console)
 	console.PPU = NewPPU(&console)
 
-	if err := console.LoadDynamic(dynamicDecoder); err != nil {
+	if err := console.DeserializeDynamic(dynamic); err != nil {
 		return nil, err
 	}
 
-	return &Headless{console}, nil
+	return &console, nil
 }
 
-func (headless *Headless) Run(activity []Action) {
-	console := headless.Console
-	for _, action := range activity {
-		if action.Button < 8 {
-			console.Controller1.buttons[action.Button] = action.Press
-		}
-		if action.Wait > 0 {
-			headless.Tick(action.Wait)
-		}
-	}
-}
+// type Action struct {
+// 	Button int
+// 	Press  bool
+// 	Wait   int
+// }
 
-// One tick corresponds to a fixed number of CPU Steps (not cycles!).
-func (headless *Headless) Tick(ticks int) {
-	console := headless.Console
-	steps := ConsoleStepsPerTick * ticks
-	for step := 0; step < steps; step++ {
-		console.Step()
-	}
-}
-
-func HeadlessRun(static []byte, dynamic []byte, activity []Action) ([]byte, []byte, error) {
-	headless, err := NewHeadless(static, dynamic)
-	if err != nil {
-		return nil, nil, err
-	}
-	headless.Run(activity)
-	static, err = headless.Console.SerializeStatic()
-	if err != nil {
-		return nil, nil, err
-	}
-	dynamic, err = headless.Console.SerializeStatic()
-	if err != nil {
-		return nil, nil, err
-	}
-	return static, dynamic, nil
-}
-
-func Compress(data []byte) ([]byte, error) {
-	var buffer bytes.Buffer
-	gz := gzip.NewWriter(&buffer)
-	if _, err := gz.Write(data); err != nil {
-		return nil, err
-	}
-	if err := gz.Close(); err != nil {
-		return nil, err
-	}
-	return buffer.Bytes(), nil
-}
-
-func Decompress(data []byte) ([]byte, error) {
-	gz, err := gzip.NewReader(bytes.NewBuffer(data))
-	if err != nil {
-		return nil, err
-	}
-	defer gz.Close()
-
-	return ioutil.ReadAll(gz)
-}
+// func HeadlessRun(console *Console, activity []Action) {
+// 	for _, action := range activity {
+// 		if action.Button < 8 {
+// 			console.Controller1.buttons[action.Button] = action.Press
+// 		}
+// 		// Run Wait instructions (not cycles!)
+// 		for ii := 0; ii < action.Wait; ii++ {
+// 			console.Step()
+// 		}
+// 	}
+// }

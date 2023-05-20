@@ -21,8 +21,12 @@ const (
 )
 
 func main() {
+
+	fmt.Println("[wasm] Starting")
+
 	kb := NewKeyboard()
 	renderer := NewRenderer()
+	pauser := NewPauser()
 
 	nes, err := nes.NewHeadlessConsole(staticData, dynamicData)
 	if err != nil {
@@ -34,15 +38,55 @@ func main() {
 	defer ticker.Stop()
 
 	for range ticker.C {
+		pauser.wait()
 		controller := kb.getController()
 		nes.Controller1.SetButtons(controller)
-		startTime := time.Now()
+		// startTime := time.Now()
 		nes.StepSeconds(spf.Seconds())
-		fmt.Println("[wasm] Stepped", spf, "in", time.Since(startTime))
-		startTime = time.Now()
+		// fmt.Println("[wasm] Stepped", spf, "in", time.Since(startTime))
+		// startTime = time.Now()
 		renderer.renderImage(nes.Buffer().Pix)
-		fmt.Println("[wasm] Renderer in", time.Since(startTime))
+		// fmt.Println("[wasm] Renderer in", time.Since(startTime))
 	}
+}
+
+type pauser struct {
+	pauseChan   chan struct{}
+	unpauseChan chan struct{}
+}
+
+func NewPauser() *pauser {
+	p := &pauser{
+		pauseChan:   make(chan struct{}),
+		unpauseChan: make(chan struct{}),
+	}
+	window := js.Global().Get("window")
+	window.Call("addEventListener", "keyup", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		switch args[0].Get("code").String() {
+		case "KeyP":
+			p.Pause()
+		case "KeyO":
+			p.Unpause()
+		}
+		return nil
+	}))
+	return p
+}
+
+func (p *pauser) wait() {
+	select {
+	case <-p.pauseChan:
+		<-p.unpauseChan
+	default:
+	}
+}
+
+func (p *pauser) Pause() {
+	p.pauseChan <- struct{}{}
+}
+
+func (p *pauser) Unpause() {
+	p.unpauseChan <- struct{}{}
 }
 
 type renderer struct {
@@ -96,15 +140,19 @@ func NewKeyboard() *keyboard {
 	return kb
 }
 
+func (kb *keyboard) isPressed(key string) bool {
+	return kb.keyStates[key]
+}
+
 func (kb *keyboard) getController() [8]bool {
 	return [8]bool{
-		kb.keyStates["KeyZ"],
-		kb.keyStates["KeyX"],
-		kb.keyStates["ShiftRight"],
-		kb.keyStates["Enter"],
-		kb.keyStates["ArrowUp"],
-		kb.keyStates["ArrowDown"],
-		kb.keyStates["ArrowLeft"],
-		kb.keyStates["ArrowRight"],
+		kb.isPressed("KeyZ"),
+		kb.isPressed("KeyX"),
+		kb.isPressed("ShiftRight"),
+		kb.isPressed("Enter"),
+		kb.isPressed("ArrowUp"),
+		kb.isPressed("ArrowDown"),
+		kb.isPressed("ArrowLeft"),
+		kb.isPressed("ArrowRight"),
 	}
 }

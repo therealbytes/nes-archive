@@ -18,4 +18,5 @@ func TestHeadless(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// TODO: test that the emulator is running correctly
 }

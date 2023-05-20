@@ -3,6 +3,7 @@ package nes
 import (
 	"bytes"
 	"testing"
+	"time"
 )
 
 func TestConsole(t *testing.T) {
@@ -46,4 +47,25 @@ func TestConsole(t *testing.T) {
 	if !bytes.Equal(console1.Buffer().Pix, console2.Buffer().Pix) {
 		t.Fatal("buffers are not equal")
 	}
+}
+
+func BenchmarkConsole(b *testing.B) {
+	console, err := NewConsole("../roms/mario.nes")
+	if err != nil {
+		b.Fatal(err)
+	}
+	console.Reset()
+
+	startTime := time.Now()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		console.StepSeconds(100 * time.Millisecond.Seconds())
+	}
+	b.StopTimer()
+
+	durationNs := time.Since(startTime).Nanoseconds()
+	consoleNs := int64(b.N) * 100 * time.Millisecond.Nanoseconds()
+
+	b.ReportMetric(float64(consoleNs)/float64(durationNs), "x")
 }

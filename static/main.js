@@ -6,13 +6,9 @@ if (WebAssembly) {
         };
     }
     const go = new Go();
-    let mod, inst;
     WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
         console.log("WebAssembly module loaded");
-        mod = result.module;
-        inst = result.instance;
-        go.run(inst)
-        inst = WebAssembly.instantiate(mod, go.importObject); // reset instance
+        go.run(result.instance);
     }).catch((err) => {
         console.error(err);
     });

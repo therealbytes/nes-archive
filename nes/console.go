@@ -52,9 +52,9 @@ func (console *Console) Step() int {
 		console.PPU.Step()
 		console.Mapper.Step()
 	}
-	for i := 0; i < cpuCycles; i++ {
-		console.APU.Step()
-	}
+	// for i := 0; i < cpuCycles; i++ {
+	// 	console.APU.Step()
+	// }
 	return cpuCycles
 }
 

@@ -7,9 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/fogleman/nes/cmd"
 	"github.com/fogleman/nes/nes"
 )
+
+// Ugly patchwork encoding utility
 
 func main() {
 	log.SetFlags(0)
@@ -43,12 +46,22 @@ func encode(path string) {
 
 	// write static data
 	staticPath := noext + ".static"
+	staticHash := crypto.Keccak256Hash(static)
+	fmt.Println("Static hash:", staticHash.Hex())
 	fmt.Println("Writing static data:", staticPath)
 	writeFile(staticPath, static)
 
 	// write dynamic data
 	dynPath := noext + ".dyn"
+	dynHash := crypto.Keccak256Hash(dyn)
+	fmt.Println("Dynamic hash:", dynHash.Hex())
 	fmt.Println("Writing dynamic data:", dynPath)
+	writeFile(dynPath, dyn)
+
+	// write preimages
+	staticPath = "./preimages/" + staticHash.Hex() + ".bin"
+	writeFile(staticPath, static)
+	dynPath = "./preimages/" + dynHash.Hex() + ".bin"
 	writeFile(dynPath, dyn)
 }
 

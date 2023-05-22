@@ -97,9 +97,27 @@ type renderer struct {
 	jsData    js.Value
 }
 
+func NewCanvas(document js.Value) js.Value {
+	// Create a new canvas element
+	canvas := document.Call("createElement", "canvas")
+
+	// Set the canvas id
+	// canvas.Set("id", "myCanvas")
+
+	// Set canvas width and height
+	canvas.Set("width", NES_WIDTH)
+	canvas.Set("height", NES_HEIGHT)
+	canvas.Get("classList").Call("add", "nes")
+
+	// Append the canvas to the body of the document
+	document.Get("body").Call("appendChild", canvas)
+
+	return canvas
+}
+
 func NewRenderer() *renderer {
 	document := js.Global().Get("document")
-	canvas := document.Call("getElementById", "canvas")
+	canvas := NewCanvas(document)
 	context := canvas.Call("getContext", "2d")
 	imageData := context.Call("createImageData", NES_WIDTH, NES_HEIGHT)
 	jsData := imageData.Get("data")

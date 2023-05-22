@@ -33,26 +33,20 @@ var preimageCache = map[common.Hash][]byte{
 
 func main() {
 
-	fmt.Println("[wasm] Starting")
+	fmt.Println("[wasm] Initializing")
 
 	kb := NewKeyboard()
 	renderer := NewRenderer()
 	api := NewAPI()
 	governor := NewMovingAverage(15)
 
-	var staticData []byte
-	var dynData []byte
-
-	machine, err := nes.NewHeadlessConsole(marioStaticData, marioDynData)
-	if err != nil {
-		panic(err)
-	}
+	var machine *nes.Console
 
 	spf := time.Second / 60
 	speed := 1.0
 
 	<-api.startChan
-	fmt.Println("[wasm] Starting machine")
+	fmt.Println("[wasm] Starting")
 
 	ticker := time.NewTicker(spf)
 	defer ticker.Stop()
@@ -71,23 +65,26 @@ func main() {
 			preimageCache[preimage.hash] = preimage.data
 			fmt.Println("[wasm] Received preimage", preimage.hash)
 		case cartridge := <-api.cartridgeChan:
-			_staticData, ok := preimageCache[cartridge.static]
+			staticData, ok := preimageCache[cartridge.static]
 			if !ok {
 				fmt.Println("[wasm] Static preimage not found")
 				continue
 			}
-			_dynData, ok := preimageCache[cartridge.dyn]
+			dynData, ok := preimageCache[cartridge.dyn]
 			if !ok {
 				fmt.Println("[wasm] Dynamic preimage not found")
 				continue
 			}
-			staticData = _staticData
-			dynData = _dynData
+			var err error
+			machine, err = nes.NewHeadlessConsole(staticData, dynData)
+			if err != nil {
+				fmt.Println("[wasm] Error loading cartridge:", err)
+				continue
+			}
 			fmt.Println("[wasm] Inserted cartridge", cartridge.static, cartridge.dyn)
 		case <-ticker.C:
 			startTime := time.Now()
-			// fmt.Println("[wasm] Tick")
-			if staticData == nil || dynData == nil {
+			if machine == nil {
 				fmt.Println("[wasm] No cartridge")
 				continue
 			}

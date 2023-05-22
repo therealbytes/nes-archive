@@ -1,24 +1,14 @@
 package main
 
 import (
-	"bytes"
-	"compress/gzip"
 	_ "embed"
 	"fmt"
-	"io/ioutil"
 	"syscall/js"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/fogleman/nes/nes"
 )
-
-//go:embed state/mario.static
-var marioStaticData []byte
-
-//go:embed state/mario.dyn
-var marioDynData []byte
 
 const (
 	NES_WIDTH  = 256
@@ -26,10 +16,7 @@ const (
 )
 
 // TODO: proper cache
-var preimageCache = map[common.Hash][]byte{
-	hashStaticState(marioStaticData): marioStaticData,
-	hashDynState(marioDynData):       marioDynData,
-}
+var preimageCache = map[common.Hash][]byte{}
 
 func main() {
 
@@ -53,17 +40,34 @@ func main() {
 
 	for {
 		select {
+		case <-api.unpauseChan:
+			fmt.Println("[wasm] Already unpaused")
+			continue
 		case <-api.pauseChan:
 			fmt.Println("[wasm] Paused")
 			renderer.dim()
-			<-api.pauseChan
+		pause:
+			for {
+				select {
+				case <-api.pauseChan:
+					fmt.Println("[wasm] Already paused")
+					continue
+				case <-api.unpauseChan:
+					fmt.Println("[wasm] Unpausing")
+					break pause
+				}
+			}
 			fmt.Println("[wasm] Unpaused")
 		case newSpeed := <-api.speedChan:
 			speed = newSpeed
 			fmt.Println("[wasm] Speed changed to", newSpeed)
 		case preimage := <-api.preimageChan:
+			if _, ok := preimageCache[preimage.hash]; ok {
+				fmt.Println("[wasm] Preimage already exists")
+				continue
+			}
 			preimageCache[preimage.hash] = preimage.data
-			fmt.Println("[wasm] Received preimage", preimage.hash)
+			fmt.Println("[wasm] Set preimage", preimage.hash)
 		case cartridge := <-api.cartridgeChan:
 			staticData, ok := preimageCache[cartridge.static]
 			if !ok {
@@ -85,7 +89,7 @@ func main() {
 		case <-ticker.C:
 			startTime := time.Now()
 			if machine == nil {
-				fmt.Println("[wasm] No cartridge")
+				// fmt.Println("[wasm] No cartridge")
 				continue
 			}
 			steps := int(speed * spf.Seconds() * nes.CPUFrequency)
@@ -125,6 +129,7 @@ type cartridge struct {
 type nesApi struct {
 	startChan     chan struct{}
 	pauseChan     chan struct{}
+	unpauseChan   chan struct{}
 	speedChan     chan float64
 	preimageChan  chan preimage
 	cartridgeChan chan cartridge
@@ -132,11 +137,12 @@ type nesApi struct {
 
 func NewAPI() *nesApi {
 	a := &nesApi{
-		startChan:     make(chan struct{}),
-		pauseChan:     make(chan struct{}),
-		speedChan:     make(chan float64),
-		preimageChan:  make(chan preimage),
-		cartridgeChan: make(chan cartridge),
+		startChan:     make(chan struct{}, 64),
+		pauseChan:     make(chan struct{}, 64),
+		unpauseChan:   make(chan struct{}, 64),
+		speedChan:     make(chan float64, 64),
+		preimageChan:  make(chan preimage, 64),
+		cartridgeChan: make(chan cartridge, 64),
 	}
 	js.Global().Set("NesAPI", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		return map[string]interface{}{
@@ -144,8 +150,12 @@ func NewAPI() *nesApi {
 				a.start()
 				return nil
 			}),
-			"togglePause": js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-				a.togglePause()
+			"pause": js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+				a.pause()
+				return nil
+			}),
+			"unpause": js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+				a.unpause()
 				return nil
 			}),
 			"setSpeed": js.FuncOf(func(this js.Value, args []js.Value) interface{} {
@@ -190,8 +200,12 @@ func (a *nesApi) start() {
 	a.startChan <- struct{}{}
 }
 
-func (a *nesApi) togglePause() {
+func (a *nesApi) pause() {
 	a.pauseChan <- struct{}{}
+}
+
+func (a *nesApi) unpause() {
+	a.unpauseChan <- struct{}{}
 }
 
 func (a *nesApi) setSpeed(speed float64) {
@@ -299,42 +313,6 @@ func (kb *keyboard) getController() [8]bool {
 		kb.isPressed("ArrowLeft"),
 		kb.isPressed("ArrowRight"),
 	}
-}
-
-func hashStaticState(data []byte) common.Hash {
-	zip, err := compress(data)
-	if err != nil {
-		panic(err)
-	}
-	hash := crypto.Keccak256Hash(zip)
-	return hash
-}
-
-func hashDynState(data []byte) common.Hash {
-	// TODO: trie
-	hash := crypto.Keccak256Hash(data)
-	return hash
-}
-
-func compress(data []byte) ([]byte, error) {
-	var buffer bytes.Buffer
-	gz := gzip.NewWriter(&buffer)
-	if _, err := gz.Write(data); err != nil {
-		return nil, err
-	}
-	if err := gz.Close(); err != nil {
-		return nil, err
-	}
-	return buffer.Bytes(), nil
-}
-
-func decompress(data []byte) ([]byte, error) {
-	gz, err := gzip.NewReader(bytes.NewBuffer(data))
-	if err != nil {
-		return nil, err
-	}
-	defer gz.Close()
-	return ioutil.ReadAll(gz)
 }
 
 type MovingAverage struct {

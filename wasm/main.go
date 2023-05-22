@@ -61,6 +61,7 @@ func main() {
 		select {
 		case <-api.pauseChan:
 			fmt.Println("[wasm] Paused")
+			renderer.dim()
 			<-api.pauseChan
 			fmt.Println("[wasm] Unpaused")
 		case newSpeed := <-api.speedChan:
@@ -253,6 +254,13 @@ func (r *renderer) renderImage(rawImageData []uint8) {
 	r.context.Call("clearRect", 0, 0, r.canvas.Get("width").Int(), r.canvas.Get("height").Int())
 	js.CopyBytesToJS(r.jsData, rawImageData)
 	r.context.Call("putImageData", r.imageData, 0, 0)
+}
+
+func (r *renderer) dim() {
+	r.context.Set("fillStyle", "rgba(255, 255, 255, 0.5)")
+	width := r.canvas.Get("width").Float()
+	height := r.canvas.Get("height").Float()
+	r.context.Call("fillRect", 0, 0, width, height)
 }
 
 // TODO: set controller t/ API [?]

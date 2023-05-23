@@ -442,6 +442,6 @@ func (r *recorder) getActivity() []Action {
 
 func (r *recorder) reset() {
 	r.activity = make([]Action, 0)
-	nilAction := Action{255, false, 0}
+	nilAction := Action{0, false, 0}
 	r.activity = append(r.activity, nilAction)
 }

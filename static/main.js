@@ -13,7 +13,7 @@ function hexToUint8Array(hexString) {
     return bytes;
 }
 
-const staticHash = "0xebefff5d04586f1d5ba0d052d1a06f2535c5dd92be22c289295442b1048fe872"
+const staticHash = "0xda2437bb81b1a07d5e2832768ba41f1a43cf060ba5a2db3ac0265361220ed82c"
 const staticHashBytes = hexToUint8Array(staticHash);
 
 const dynHash = "0x4123f2d81428f7090218f975b941122f3797aeb8f97bf7d1ef6e87491c920a5c"
@@ -37,6 +37,12 @@ if (WebAssembly) {
         console.log("NesAPI loaded", api);
         api.start();
         api.setCartridge(staticHashBytes, dynHashBytes);
+        setTimeout(() => {
+            const activity = api.getActivity();
+            const jsonString = new TextDecoder().decode(activity);
+            const jsonObject = JSON.parse(jsonString);
+            console.log("activity", jsonObject);
+        }, 20000);
     }).catch((err) => {
         console.error(err);
     });

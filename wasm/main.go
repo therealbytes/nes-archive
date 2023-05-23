@@ -2,11 +2,13 @@ package main
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"syscall/js"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/fogleman/nes/nes"
 )
 
@@ -15,8 +17,17 @@ const (
 	NES_HEIGHT = 240
 )
 
+//go:embed state/mario.static
+var marioStatic []byte
+
+//go:embed state/mario.dyn
+var marioDyn []byte
+
 // TODO: proper cache
-var preimageCache = map[common.Hash][]byte{}
+var preimageCache = map[common.Hash][]byte{
+	crypto.Keccak256Hash(marioStatic): marioStatic,
+	crypto.Keccak256Hash(marioDyn):    marioDyn,
+}
 
 func main() {
 
@@ -26,6 +37,7 @@ func main() {
 	renderer := NewRenderer()
 	api := NewAPI()
 	governor := NewMovingAverage(15)
+	recorder := NewRecorder()
 
 	var machine *nes.Console
 
@@ -58,6 +70,21 @@ func main() {
 				}
 			}
 			fmt.Println("[wasm] Unpaused")
+		case <-api.requestActivityChan:
+			fmt.Println("[wasm] Requesting activity")
+			if machine == nil {
+				api.returnHashChan <- common.Hash{}
+				continue
+			}
+			dyn, err := machine.SerializeDynamic()
+			if err != nil {
+				panic(err)
+			}
+			hash := crypto.Keccak256Hash(dyn)
+			fmt.Println("[wasm] Caching dynamic state", hash.Hex())
+			preimageCache[hash] = dyn
+			api.returnHashChan <- hash
+			api.returnActivityChan <- recorder.getActivity()
 		case newSpeed := <-api.speedChan:
 			speed = newSpeed
 			fmt.Println("[wasm] Speed changed to", newSpeed)
@@ -86,6 +113,8 @@ func main() {
 				continue
 			}
 			fmt.Println("[wasm] Inserted cartridge", cartridge.static, cartridge.dyn)
+			recorder.reset()
+			fmt.Println("[wasm] Reset recorder")
 		case <-ticker.C:
 			startTime := time.Now()
 			if machine == nil {
@@ -95,10 +124,15 @@ func main() {
 			steps := int(speed * spf.Seconds() * nes.CPUFrequency)
 			controller := kb.getController()
 			machine.Controller1.SetButtons(controller)
+
+			recorder.record(controller, uint32(steps))
+
 			for i := 0; i < steps; i++ {
 				machine.Step()
 			}
+
 			renderer.renderImage(machine.Buffer().Pix)
+
 			elapsedTime := time.Since(startTime)
 			avgMs := governor.Add(float64(elapsedTime.Milliseconds()))
 			spfMs := float64(spf.Milliseconds())
@@ -127,22 +161,30 @@ type cartridge struct {
 }
 
 type nesApi struct {
-	startChan     chan struct{}
-	pauseChan     chan struct{}
-	unpauseChan   chan struct{}
-	speedChan     chan float64
-	preimageChan  chan preimage
-	cartridgeChan chan cartridge
+	startChan                chan struct{}
+	pauseChan                chan struct{}
+	unpauseChan              chan struct{}
+	speedChan                chan float64
+	preimageChan             chan preimage
+	cartridgeChan            chan cartridge
+	requestActivityChan      chan struct{}
+	returnActivityChan       chan []Action
+	requestCachePreimageChan chan struct{}
+	returnHashChan           chan common.Hash
 }
 
 func NewAPI() *nesApi {
 	a := &nesApi{
-		startChan:     make(chan struct{}, 64),
-		pauseChan:     make(chan struct{}, 64),
-		unpauseChan:   make(chan struct{}, 64),
-		speedChan:     make(chan float64, 64),
-		preimageChan:  make(chan preimage, 64),
-		cartridgeChan: make(chan cartridge, 64),
+		startChan:                make(chan struct{}, 64),
+		pauseChan:                make(chan struct{}, 64),
+		unpauseChan:              make(chan struct{}, 64),
+		speedChan:                make(chan float64, 64),
+		preimageChan:             make(chan preimage, 64),
+		cartridgeChan:            make(chan cartridge, 64),
+		requestActivityChan:      make(chan struct{}, 64),
+		returnActivityChan:       make(chan []Action, 64),
+		requestCachePreimageChan: make(chan struct{}, 64),
+		returnHashChan:           make(chan common.Hash, 64),
 	}
 	js.Global().Set("NesAPI", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		return map[string]interface{}{
@@ -191,6 +233,16 @@ func NewAPI() *nesApi {
 				a.setCartridge(staticInGo, dynInGo)
 				return nil
 			}),
+			"getActivity": js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+				activity := a.getActivity()
+				activityJson, err := json.Marshal(activity)
+				if err != nil {
+					panic(err)
+				}
+				jsActivity := js.Global().Get("Uint8Array").New(len(activityJson))
+				js.CopyBytesToJS(jsActivity, activityJson)
+				return jsActivity
+			}),
 		}
 	}))
 	return a
@@ -218,6 +270,13 @@ func (a *nesApi) setPreimage(hash common.Hash, data []byte) {
 
 func (a *nesApi) setCartridge(static, dyn common.Hash) {
 	a.cartridgeChan <- cartridge{static, dyn}
+}
+
+func (a *nesApi) getActivity() []Action {
+	a.requestActivityChan <- struct{}{}
+	<-a.returnHashChan
+	activity := <-a.returnActivityChan
+	return activity
 }
 
 type renderer struct {
@@ -336,4 +395,47 @@ func (ma *MovingAverage) Add(value float64) float64 {
 	ma.queue = append(ma.queue, value)
 	ma.sum += value
 	return ma.sum / float64(len(ma.queue))
+}
+
+type Action struct {
+	Button   uint8
+	Press    bool
+	Duration uint32
+}
+
+type recorder struct {
+	buttons  [8]bool
+	activity []Action
+}
+
+func NewRecorder() *recorder {
+	r := &recorder{
+		buttons:  [8]bool{},
+		activity: make([]Action, 0),
+	}
+	r.reset()
+	return r
+}
+
+func (r *recorder) record(buttons [8]bool, duration uint32) {
+	if buttons != r.buttons {
+		for button, press := range buttons {
+			if press != r.buttons[button] {
+				action := Action{uint8(button), press, 0}
+				r.activity = append(r.activity, action)
+			}
+		}
+		r.buttons = buttons
+	}
+	r.activity[len(r.activity)-1].Duration += duration
+}
+
+func (r *recorder) getActivity() []Action {
+	return r.activity
+}
+
+func (r *recorder) reset() {
+	r.activity = make([]Action, 0)
+	nilAction := Action{255, false, 0}
+	r.activity = append(r.activity, nilAction)
 }

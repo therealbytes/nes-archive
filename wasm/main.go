@@ -234,8 +234,14 @@ func NewAPI() *nesApi {
 				return nil
 			}),
 			"getActivity": js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-				activity := a.getActivity()
-				activityJson, err := json.Marshal(activity)
+				hash, activity := a.getActivity()
+				activityJson, err := json.Marshal(struct {
+					Hash     common.Hash
+					Activity []Action
+				}{
+					hash,
+					activity,
+				})
 				if err != nil {
 					panic(err)
 				}
@@ -272,11 +278,11 @@ func (a *nesApi) setCartridge(static, dyn common.Hash) {
 	a.cartridgeChan <- cartridge{static, dyn}
 }
 
-func (a *nesApi) getActivity() []Action {
+func (a *nesApi) getActivity() (common.Hash, []Action) {
 	a.requestActivityChan <- struct{}{}
-	<-a.returnHashChan
+	hash := <-a.returnHashChan
 	activity := <-a.returnActivityChan
-	return activity
+	return hash, activity
 }
 
 type renderer struct {

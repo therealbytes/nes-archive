@@ -26,7 +26,7 @@ func TestConsole(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	console2, err := NewHeadlessConsole(static, dynamic)
+	console2, err := NewHeadlessConsole(static, dynamic, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,22 +50,54 @@ func TestConsole(t *testing.T) {
 }
 
 func BenchmarkConsole(b *testing.B) {
-	console, err := NewConsole("../roms/mario.nes")
+	ogConsole, err := NewConsole("../roms/mario.nes")
 	if err != nil {
 		b.Fatal(err)
 	}
-	console.Reset()
+	ogConsole.Reset()
 
-	startTime := time.Now()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		console.StepSeconds(100 * time.Millisecond.Seconds())
+	static, err := ogConsole.SerializeStatic()
+	if err != nil {
+		b.Fatal(err)
 	}
-	b.StopTimer()
+	dynamic, err := ogConsole.SerializeDynamic()
+	if err != nil {
+		b.Fatal(err)
+	}
 
-	durationNs := time.Since(startTime).Nanoseconds()
-	consoleNs := int64(b.N) * 100 * time.Millisecond.Nanoseconds()
+	noAPUConsole, err := NewHeadlessConsole(static, dynamic, true, false)
+	if err != nil {
+		b.Fatal(err)
+	}
 
-	b.ReportMetric(float64(consoleNs)/float64(durationNs), "x")
+	noPixConsole, err := NewHeadlessConsole(static, dynamic, false, false)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	bms := []struct {
+		name    string
+		console *Console
+	}{
+		{"APU && PIX", ogConsole},
+		{"!APU && PIX", noAPUConsole},
+		{"!APU && !PIX", noPixConsole},
+	}
+
+	for _, bm := range bms {
+		b.Run(bm.name, func(b *testing.B) {
+			startTime := time.Now()
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				bm.console.StepSeconds(100 * time.Millisecond.Seconds())
+			}
+			b.StopTimer()
+
+			durationNs := time.Since(startTime).Nanoseconds()
+			consoleNs := int64(b.N) * 100 * time.Millisecond.Nanoseconds()
+
+			b.ReportMetric(float64(consoleNs)/float64(durationNs), "x")
+		})
+	}
 }

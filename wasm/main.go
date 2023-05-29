@@ -1,9 +1,9 @@
 package main
 
 import (
-	_ "embed"
 	"encoding/json"
 	"fmt"
+	"image"
 	"syscall/js"
 	"time"
 
@@ -17,17 +17,7 @@ const (
 	NES_HEIGHT = 240
 )
 
-//go:embed state/mario.static
-var marioStatic []byte
-
-//go:embed state/mario.dyn
-var marioDyn []byte
-
-// TODO: proper cache
-var preimageCache = map[common.Hash][]byte{
-	crypto.Keccak256Hash(marioStatic): marioStatic,
-	crypto.Keccak256Hash(marioDyn):    marioDyn,
-}
+var preimageCache = map[common.Hash][]byte{}
 
 func main() {
 
@@ -36,12 +26,13 @@ func main() {
 	kb := NewKeyboard()
 	renderer := NewRenderer()
 	api := NewAPI()
-	governor := NewMovingAverage(15)
+	governor := NewMovingAverage(60)
 	recorder := NewRecorder()
 
 	var machine *nes.Console
 
 	spf := time.Second / 60
+	spfMs := float64(spf.Milliseconds())
 	speed := 1.0
 
 	<-api.startChan
@@ -81,21 +72,25 @@ func main() {
 				panic(err)
 			}
 			hash := crypto.Keccak256Hash(dyn)
-			fmt.Println("[wasm] Caching dynamic state", hash.Hex())
 			preimageCache[hash] = dyn
+			fmt.Println("[wasm] Cached dynamic state", hash.Hex())
 			api.returnHashChan <- hash
 			api.returnActivityChan <- recorder.getActivity()
+			fmt.Println("[wasm] Returned activity")
 		case newSpeed := <-api.speedChan:
+			fmt.Println("[wasm] Changing speed to", newSpeed)
 			speed = newSpeed
-			fmt.Println("[wasm] Speed changed to", newSpeed)
+			fmt.Println("[wasm] Speed changed")
 		case preimage := <-api.preimageChan:
+			fmt.Println("[wasm] Setting preimage", preimage.hash)
 			if _, ok := preimageCache[preimage.hash]; ok {
 				fmt.Println("[wasm] Preimage already exists")
 				continue
 			}
 			preimageCache[preimage.hash] = preimage.data
-			fmt.Println("[wasm] Set preimage", preimage.hash)
+			fmt.Println("[wasm] Set preimage")
 		case cartridge := <-api.cartridgeChan:
+			fmt.Println("[wasm] Loading cartridge", cartridge.static, cartridge.dyn)
 			staticData, ok := preimageCache[cartridge.static]
 			if !ok {
 				fmt.Println("[wasm] Static preimage not found")
@@ -107,44 +102,49 @@ func main() {
 				continue
 			}
 			var err error
-			machine, err = nes.NewHeadlessConsole(staticData, dynData)
+			machine, err = nes.NewHeadlessConsole(staticData, dynData, true, false)
 			if err != nil {
 				fmt.Println("[wasm] Error loading cartridge:", err)
 				continue
 			}
-			fmt.Println("[wasm] Inserted cartridge", cartridge.static, cartridge.dyn)
+			fmt.Println("[wasm] Loaded cartridge")
+			fmt.Println("[wasm] Resetting recorder")
 			recorder.reset()
 			fmt.Println("[wasm] Reset recorder")
 		case <-ticker.C:
-			startTime := time.Now()
 			if machine == nil {
-				// fmt.Println("[wasm] No cartridge")
 				continue
 			}
-			steps := int(speed * spf.Seconds() * nes.CPUFrequency)
+
+			startTime := time.Now()
+
 			controller := kb.getController()
 			machine.Controller1.SetButtons(controller)
-
-			recorder.record(controller, uint32(steps))
+			steps := int(speed * spf.Seconds() * nes.CPUFrequency)
 
 			for i := 0; i < steps; i++ {
 				machine.Step()
 			}
 
-			renderer.renderImage(machine.Buffer().Pix)
+			recorder.record(controller, uint32(steps))
+			renderer.renderImage(machine.Buffer())
 
 			elapsedTime := time.Since(startTime)
+
 			avgMs := governor.Add(float64(elapsedTime.Milliseconds()))
-			spfMs := float64(spf.Milliseconds())
-			if avgMs > spfMs*0.875 {
+			if avgMs > spfMs*0.85 {
+				fmt.Println("[wasm] Ticking is taking too long:", int(avgMs), "ms/tick")
 				newSpeed := speed * 0.99
 				speed = newSpeed
-			} else if speed < 1.0 && avgMs < spfMs*0.875 {
+				fmt.Println("[wasm] New speed:", speed)
+			} else if speed < 1.0 && avgMs < spfMs*0.75 {
+				fmt.Println("[wasm] Ticking is quick:", int(avgMs), "ms/tick")
 				newSpeed := speed * 1.005
 				if newSpeed > 1.0 {
 					newSpeed = 1.0
 				}
 				speed = newSpeed
+				fmt.Println("[wasm] New speed:", speed)
 			}
 		}
 	}
@@ -293,27 +293,17 @@ type renderer struct {
 	jsData    js.Value
 }
 
-func NewCanvas(document js.Value) js.Value {
-	// Create a new canvas element
+func NewCanvas(document js.Value, width int, height int) js.Value {
 	canvas := document.Call("createElement", "canvas")
-
-	// Set the canvas id
-	// canvas.Set("id", "myCanvas")
-
-	// Set canvas width and height
-	canvas.Set("width", NES_WIDTH)
-	canvas.Set("height", NES_HEIGHT)
-	canvas.Get("classList").Call("add", "nes")
-
-	// Append the canvas to the body of the document
+	canvas.Set("width", width)
+	canvas.Set("height", height)
 	document.Get("body").Call("appendChild", canvas)
-
 	return canvas
 }
 
 func NewRenderer() *renderer {
 	document := js.Global().Get("document")
-	canvas := NewCanvas(document)
+	canvas := NewCanvas(document, NES_WIDTH, NES_HEIGHT)
 	context := canvas.Call("getContext", "2d")
 	imageData := context.Call("createImageData", NES_WIDTH, NES_HEIGHT)
 	jsData := imageData.Get("data")
@@ -326,8 +316,9 @@ func NewRenderer() *renderer {
 	}
 }
 
-func (r *renderer) renderImage(rawImageData []uint8) {
-	r.context.Call("clearRect", 0, 0, r.canvas.Get("width").Int(), r.canvas.Get("height").Int())
+func (r *renderer) renderImage(img *image.RGBA) {
+	rawImageData := img.Pix
+	r.context.Call("clearRect", 0, 0, NES_WIDTH, NES_HEIGHT)
 	js.CopyBytesToJS(r.jsData, rawImageData)
 	r.context.Call("putImageData", r.imageData, 0, 0)
 }
@@ -338,8 +329,6 @@ func (r *renderer) dim() {
 	height := r.canvas.Get("height").Float()
 	r.context.Call("fillRect", 0, 0, width, height)
 }
-
-// TODO: set controller t/ API [?]
 
 type keyboard struct {
 	keyStates map[string]bool

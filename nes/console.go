@@ -9,7 +9,14 @@ import (
 	"path"
 )
 
+type MetaConfig struct {
+	Headless     bool
+	RenderPixels bool
+	StepAPU      bool
+}
+
 type Console struct {
+	MetaConfig  *MetaConfig
 	CPU         *CPU
 	APU         *APU
 	PPU         *PPU
@@ -28,8 +35,9 @@ func NewConsole(path string) (*Console, error) {
 	ram := make([]byte, 2048)
 	controller1 := NewController()
 	controller2 := NewController()
+	meta := &MetaConfig{Headless: false, RenderPixels: true, StepAPU: true}
 	console := Console{
-		nil, nil, nil, cartridge, controller1, controller2, nil, ram}
+		meta, nil, nil, nil, cartridge, controller1, controller2, nil, ram}
 	mapper, err := NewMapper(&console)
 	if err != nil {
 		return nil, err
@@ -52,9 +60,11 @@ func (console *Console) Step() int {
 		console.PPU.Step()
 		console.Mapper.Step()
 	}
-	// for i := 0; i < cpuCycles; i++ {
-	// 	console.APU.Step()
-	// }
+	if console.MetaConfig.StepAPU {
+		for i := 0; i < cpuCycles; i++ {
+			console.APU.Step()
+		}
+	}
 	return cpuCycles
 }
 

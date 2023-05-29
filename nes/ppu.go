@@ -687,7 +687,7 @@ func (ppu *PPU) Step() {
 
 	// background logic
 	if renderingEnabled {
-		if visibleLine && visibleCycle {
+		if visibleLine && visibleCycle && ppu.console.MetaConfig.RenderPixels {
 			ppu.renderPixel()
 		}
 		if renderLine && fetchCycle {

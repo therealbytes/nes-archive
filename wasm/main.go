@@ -304,6 +304,7 @@ func NewCanvas(document js.Value, width int, height int) js.Value {
 func NewRenderer() *renderer {
 	document := js.Global().Get("document")
 	canvas := NewCanvas(document, NES_WIDTH, NES_HEIGHT)
+	canvas.Get("classList").Call("add", "nes")
 	context := canvas.Call("getContext", "2d")
 	imageData := context.Call("createImageData", NES_WIDTH, NES_HEIGHT)
 	jsData := imageData.Get("data")

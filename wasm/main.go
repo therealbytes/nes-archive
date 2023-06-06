@@ -30,7 +30,7 @@ func main() {
 
 	var machine *nes.Console
 
-	spf := time.Second / 60
+	spf := time.Second / 30
 	spfMs := int(spf.Milliseconds())
 	speed := 1.0
 
@@ -125,24 +125,25 @@ func main() {
 
 			controller := kb.getController()
 			machine.Controller1.SetButtons(controller)
-			steps := int(speed * spf.Seconds() * nes.CPUFrequency)
+			targetCycles := int(speed * spf.Seconds() * nes.CPUFrequency)
+			execCycles := 0
 
-			for i := 0; i < steps; i++ {
-				machine.Step()
+			for execCycles < targetCycles {
+				execCycles += machine.Step()
 			}
 
-			recorder.record(controller, uint32(steps))
+			recorder.record(controller, uint32(execCycles))
 			renderer.renderImage(machine.Buffer())
 
 			elapsedTime := time.Since(startTime)
-
 			avgMs := governor.Add(int(elapsedTime.Milliseconds()))
-			if avgMs > spfMs-2 {
+
+			if avgMs > spfMs-5 {
 				fmt.Println("[wasm] Ticking is taking too long:", int(avgMs), "ms/tick")
 				newSpeed := speed * 0.99
 				speed = newSpeed
 				fmt.Println("[wasm] New speed:", speed)
-			} else if speed < 1.0 && avgMs < spfMs-5 {
+			} else if speed < 1.0 && avgMs < spfMs-10 {
 				fmt.Println("[wasm] Ticking is quick:", int(avgMs), "ms/tick")
 				newSpeed := speed * 1.01
 				if newSpeed > 1.0 {

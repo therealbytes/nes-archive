@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/fogleman/nes/nes"
 )
 
@@ -32,7 +31,7 @@ func main() {
 	var machine *nes.Console
 
 	spf := time.Second / 60
-	spfMs := float64(spf.Milliseconds())
+	spfMs := int(spf.Milliseconds())
 	speed := 1.0
 
 	<-api.startChan
@@ -48,7 +47,8 @@ func main() {
 			continue
 		case <-api.pauseChan:
 			fmt.Println("[wasm] Paused")
-			renderer.dim()
+			// renderer.dim()
+			renderer.canvas.Get("classList").Call("add", "paused")
 		pause:
 			for {
 				select {
@@ -57,6 +57,7 @@ func main() {
 					continue
 				case <-api.unpauseChan:
 					fmt.Println("[wasm] Unpausing")
+					renderer.canvas.Get("classList").Call("remove", "paused")
 					break pause
 				}
 			}
@@ -65,16 +66,17 @@ func main() {
 			fmt.Println("[wasm] Requesting activity")
 			if machine == nil {
 				api.returnHashChan <- common.Hash{}
+				api.returnActivityChan <- []Action{}
 				continue
 			}
-			dyn, err := machine.SerializeDynamic()
-			if err != nil {
-				panic(err)
-			}
-			hash := crypto.Keccak256Hash(dyn)
-			preimageCache[hash] = dyn
-			fmt.Println("[wasm] Cached dynamic state", hash.Hex())
-			api.returnHashChan <- hash
+			// dyn, err := machine.SerializeDynamic()
+			// if err != nil {
+			// 	panic(err)
+			// }
+			// hash := crypto.Keccak256Hash(dyn)
+			// preimageCache[hash] = dyn
+			// fmt.Println("[wasm] Cached dynamic state", hash.Hex())
+			api.returnHashChan <- common.Hash{}
 			api.returnActivityChan <- recorder.getActivity()
 			fmt.Println("[wasm] Returned activity")
 		case newSpeed := <-api.speedChan:
@@ -83,6 +85,7 @@ func main() {
 			fmt.Println("[wasm] Speed changed")
 		case preimage := <-api.preimageChan:
 			fmt.Println("[wasm] Setting preimage", preimage.hash)
+			fmt.Println("[wasm] Preimage length:", len(preimage.data))
 			if _, ok := preimageCache[preimage.hash]; ok {
 				fmt.Println("[wasm] Preimage already exists")
 				continue
@@ -101,6 +104,8 @@ func main() {
 				fmt.Println("[wasm] Dynamic preimage not found")
 				continue
 			}
+			fmt.Println("[wasm] Static preimage length:", len(staticData))
+			fmt.Println("[wasm] Dynamic preimage length:", len(dynData))
 			var err error
 			machine, err = nes.NewHeadlessConsole(staticData, dynData, true, false)
 			if err != nil {
@@ -131,15 +136,15 @@ func main() {
 
 			elapsedTime := time.Since(startTime)
 
-			avgMs := governor.Add(float64(elapsedTime.Milliseconds()))
-			if avgMs > spfMs*0.85 {
+			avgMs := governor.Add(int(elapsedTime.Milliseconds()))
+			if avgMs > spfMs-2 {
 				fmt.Println("[wasm] Ticking is taking too long:", int(avgMs), "ms/tick")
 				newSpeed := speed * 0.99
 				speed = newSpeed
 				fmt.Println("[wasm] New speed:", speed)
-			} else if speed < 1.0 && avgMs < spfMs*0.75 {
+			} else if speed < 1.0 && avgMs < spfMs-5 {
 				fmt.Println("[wasm] Ticking is quick:", int(avgMs), "ms/tick")
-				newSpeed := speed * 1.005
+				newSpeed := speed * 1.01
 				if newSpeed > 1.0 {
 					newSpeed = 1.0
 				}
@@ -371,26 +376,21 @@ func (kb *keyboard) getController() [8]bool {
 }
 
 type MovingAverage struct {
-	size  int
-	sum   float64
-	queue []float64
+	index  int
+	sum    int
+	values []int
 }
 
 func NewMovingAverage(size int) *MovingAverage {
-	return &MovingAverage{
-		size:  size,
-		queue: make([]float64, 0, size),
-	}
+	return &MovingAverage{values: make([]int, size)}
 }
 
-func (ma *MovingAverage) Add(value float64) float64 {
-	if len(ma.queue) >= ma.size {
-		ma.sum -= ma.queue[0]
-		ma.queue = ma.queue[1:]
-	}
-	ma.queue = append(ma.queue, value)
+func (ma *MovingAverage) Add(value int) int {
+	ma.sum -= ma.values[ma.index]
 	ma.sum += value
-	return ma.sum / float64(len(ma.queue))
+	ma.values[ma.index] = value
+	ma.index = (ma.index + 1) % len(ma.values)
+	return ma.sum / len(ma.values)
 }
 
 type Action struct {

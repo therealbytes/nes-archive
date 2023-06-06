@@ -10,9 +10,8 @@ import (
 )
 
 type MetaConfig struct {
-	Headless     bool
-	RenderPixels bool
-	StepAPU      bool
+	Headless bool
+	StepAPU  bool
 }
 
 type Console struct {
@@ -35,7 +34,7 @@ func NewConsole(path string) (*Console, error) {
 	ram := make([]byte, 2048)
 	controller1 := NewController()
 	controller2 := NewController()
-	meta := &MetaConfig{Headless: false, RenderPixels: true, StepAPU: true}
+	meta := &MetaConfig{Headless: false, StepAPU: true}
 	console := Console{
 		meta, nil, nil, nil, cartridge, controller1, controller2, nil, ram}
 	mapper, err := NewMapper(&console)

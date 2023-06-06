@@ -107,7 +107,7 @@ func main() {
 			fmt.Println("[wasm] Static preimage length:", len(staticData))
 			fmt.Println("[wasm] Dynamic preimage length:", len(dynData))
 			var err error
-			machine, err = nes.NewHeadlessConsole(staticData, dynData, true, false)
+			machine, err = nes.NewHeadlessConsole(staticData, dynData, true)
 			if err != nil {
 				fmt.Println("[wasm] Error loading cartridge:", err)
 				continue

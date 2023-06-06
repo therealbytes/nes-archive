@@ -26,7 +26,7 @@ func TestConsole(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	console2, err := NewHeadlessConsole(static, dynamic, false, false)
+	console2, err := NewHeadlessConsole(static, dynamic, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,12 +65,12 @@ func BenchmarkConsole(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	noAPUConsole, err := NewHeadlessConsole(static, dynamic, true, false)
+	noAPUConsole, err := NewHeadlessConsole(static, dynamic, true)
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	noPixConsole, err := NewHeadlessConsole(static, dynamic, false, false)
+	noPixConsole, err := NewHeadlessConsole(static, dynamic, false)
 	if err != nil {
 		b.Fatal(err)
 	}
